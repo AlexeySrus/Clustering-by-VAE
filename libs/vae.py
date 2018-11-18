@@ -11,10 +11,12 @@ from keras.layers import LeakyReLU, Input, Dropout, Conv2DTranspose
 from keras.models import Model
 from keras.objectives import binary_crossentropy
 from keras.layers.advanced_activations import LeakyReLU
+from keras.applications.resnet50 import ResNet50
 from keras import backend as K
 from keras import losses
 from keras.models import load_model
 from keras.regularizers import L1L2
+import tensorflow as tf
 import os
 import re
 
@@ -28,12 +30,11 @@ def create_conv_vae(input_shape, latent_dim, dropout_rate, batch_size,
 
     input_img = Input(shape=input_shape)
 
-    x = Conv2D(16, (8, 8), activation='relu', padding='same')(input_img)
-    x = MaxPooling2D()(x)
-    x = apply_bn_and_dropout(x)
+    x = Conv2D(128, (7, 7), activation='relu', padding='same')(input_img)
+    x = MaxPooling2D((2, 2), padding='same')(x)
     x = Conv2D(32, (2, 2), activation='relu', padding='same')(x)
-    x = MaxPooling2D()(x)
-    x = apply_bn_and_dropout(x)
+    x = MaxPooling2D((2, 2), padding='same')(x)
+    x = Conv2D(1, (7, 7), activation='relu', padding='same')(x)
     x = Flatten()(x)
 
     z_mean = Dense(latent_dim)(x)
@@ -49,22 +50,14 @@ def create_conv_vae(input_shape, latent_dim, dropout_rate, batch_size,
 
     z = Input(shape=(latent_dim,))
 
-    x = Dense(256)(z)
+    x = Dense(49)(z)
     x = LeakyReLU()(x)
-    #x = apply_bn_and_dropout(x)
-    x = Reshape((16, 16, 1))(x)
-    x = apply_bn_and_dropout(x)
-    x = Conv2DTranspose(32, (2, 2), activation='relu', padding='same')(x)
-    x = UpSampling2D()(x)
-    x = apply_bn_and_dropout(x)
-    x = Conv2DTranspose(16, (8, 8), activation='relu', padding='same')(x)
-    x = UpSampling2D()(x)
-    x = apply_bn_and_dropout(x)
-    x = Conv2DTranspose(1, (16, 16), activation='relu', padding='same')(x)
-    x = Flatten()(x)
-    x = apply_bn_and_dropout(x)
-    x = Dense(input_shape[0] * input_shape[1], activation='sigmoid')(x)
-    decoded = Reshape((input_shape[0], input_shape[1], 1))(x)
+    x = Reshape((7, 7, 1))(x)
+    x = Conv2D(32, (7, 7), activation='relu', padding='same')(x)
+    x = UpSampling2D((2, 2))(x)
+    x = Conv2D(128, (2, 2), activation='relu', padding='same')(x)
+    x = UpSampling2D((2, 2))(x)
+    decoded = Conv2D(1, (7, 7), activation='sigmoid', padding='same')(x)
 
     models["encoder"] = Model(input_img, l, 'Encoder')
     models["z_meaner"] = Model(input_img, z_mean, 'Enc_z_mean')
