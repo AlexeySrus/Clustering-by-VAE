@@ -50,8 +50,8 @@ def create_conv_vae(input_shape, latent_dim, dropout_rate, batch_size,
 
     z = Input(shape=(latent_dim,))
 
-    x = Dense(49)(z)
-    x = LeakyReLU()(x)
+    #x = Dense(49)(z)
+    x = LeakyReLU()(z)
     x = Reshape((7, 7, 1))(x)
     x = Conv2D(32, (7, 7), activation='relu', padding='same')(x)
     x = UpSampling2D((2, 2))(x)
