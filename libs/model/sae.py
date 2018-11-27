@@ -44,6 +44,63 @@ def step_ae(input_shape, output_shape, latent_dim,
     models["ae"].compile(optimizer=Adam(lr=start_lr), loss=loss)
     return models
 
+
+def step_vae(input_shape, output_shape, latent_dim,
+                start_lr=0.001, loss="binary_crossentropy",
+             dropout_rate=0.4, batch_size=32):
+    models = {}
+
+    def apply_bn_and_dropout(x):
+        return Dropout(dropout_rate)(BatchNormalization()(x))
+
+    input_img = Input(shape=input_shape)
+
+    x = Flatten()(input_img)
+
+    z_mean = Dense(latent_dim)(x)
+    z_log_var = Dense(latent_dim)(x)
+
+    def sampling(args):
+        z_mean, z_log_var = args
+        epsilon = K.random_normal(shape=(batch_size, latent_dim), mean=0.,
+                                  stddev=1.0)
+        return z_mean + K.exp(z_log_var / 2) * epsilon
+
+    l = Lambda(sampling, output_shape=(latent_dim,))([z_mean, z_log_var])
+
+    z = Input(shape=(latent_dim,))
+
+    z = Input(shape=(latent_dim,))
+    x = Dense(128)(z)
+    x = LeakyReLU()(x)
+    x = apply_bn_and_dropout(x)
+    x = Dense(256)(x)
+    x = LeakyReLU()(x)
+    x = apply_bn_and_dropout(x)
+    x = Dense(output_shape[0] * output_shape[1], activation='sigmoid')(x)
+    decoded = Reshape((output_shape[0], output_shape[1], 1))(x)
+
+    models["encoder"] = Model(input_img, l, 'Encoder')
+    models["z_meaner"] = Model(input_img, z_mean, 'Enc_z_mean')
+    models["z_lvarer"] = Model(input_img, z_log_var, 'Enc_z_log_var')
+
+    def vae_loss(x, decoded):
+        x = K.reshape(x, shape=(batch_size, output_shape[0] * output_shape[1]))
+        decoded = K.reshape(decoded, shape=(batch_size, output_shape[0] * output_shape[1]))
+        xent_loss = output_shape[0] * output_shape[1]*binary_crossentropy(x, decoded)
+        kl_loss = -0.5 * K.sum(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1)
+        return (xent_loss + kl_loss)/2/output_shape[0]/output_shape[1]
+
+    models["decoder"] = Model(z, decoded, name='Decoder')
+    models["ae"] = Model(input_img,
+                          models["decoder"](models["encoder"](input_img)),
+                          name="VAE")
+
+    models["ae"].compile(optimizer=Adam(lr=start_lr), loss=vae_loss)
+
+    return models
+
+
 def load_last_weights(model, path, logger=None):
     if path is None:
         return 0

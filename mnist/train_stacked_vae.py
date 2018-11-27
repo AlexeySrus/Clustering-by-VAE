@@ -5,7 +5,7 @@ import numpy as np
 from keras.datasets import mnist
 from keras.callbacks import ModelCheckpoint
 from libs.model.vae import create_conv_vae, load_last_weights
-from libs.model.sae import step_ae
+from libs.model.sae import step_ae, step_vae
 from libs.utils.dataset_processing import BatchDataLoader
 
 
@@ -23,6 +23,8 @@ def parse_arguments():
     arg_parser.add_argument('--latentdim', required=False,
                             type=int,
                             default=2)
+    arg_parser.add_argument('--last-latent-path', required=False, type=str,
+                            help='Path to save last latent data dimension.')
     return arg_parser.parse_args()
 
 
@@ -49,7 +51,9 @@ if __name__ == '__main__':
         loss='mse'
     )]
 
-    for i in range(4):
+    deep = 4
+
+    for i in range(deep):
         sae.append(step_ae(
             input_shape=(app_args.latentdim // (2 ** i), 1),
             output_shape=(28, 28, 1),
@@ -57,14 +61,23 @@ if __name__ == '__main__':
             loss='mse'
         ))
 
+    sae.append(step_vae(
+        input_shape=(app_args.latentdim // (2 ** deep), 1),
+        output_shape=(28, 28, 1),
+        latent_dim=app_args.latentdim // (2 ** (deep + 1)),
+        batch_size=app_args.batch_size
+    ))
+
     start_epoch = 0
     logging.info('START EPOCH NUMBER: {}'.format(start_epoch))
-
 
     for ae in sae:
         logging.info(ae["ae"].summary())
 
     callbacks = []
+
+    if not os.path.isdir(app_args.checkpoints):
+        os.makedirs(app_args.checkpoints)
 
     if app_args.checkpoints:
         callbacks.append(ModelCheckpoint(
@@ -81,6 +94,10 @@ if __name__ == '__main__':
         ))
 
     (x_train, y_train), (x_test, y_test) = mnist.load_data()
+
+    if app_args.last_latent_path is not None:
+        if not os.path.isdir(app_args.last_latent_path):
+            os.makedirs(app_args.last_latent_path)
 
     x_train = x_train.astype('float32') / 255.
     x_test = x_test.astype('float32') / 255.
@@ -113,6 +130,14 @@ if __name__ == '__main__':
                 app_args.batch_size
             )
 
+            if i == len(sae) - 1 and app_args.last_latent_path is not None:
+                np.save(
+                    app_args.last_latent_path + 'latent_from_{}.npy'.format(
+                        app_args.latentdim // (2 ** (i - 1))
+                    ),
+                    d
+                )
+
             d = sae[i - 1]["encoder"].predict_generator(val_data_gen)
             val_data_gen = BatchDataLoader(
                 d.reshape(
@@ -126,7 +151,7 @@ if __name__ == '__main__':
         ae["ae"].fit_generator(
             train_data_gen,
             len(train_data_gen),
-            callbacks=callbacks,
+            callbacks=callbacks if i == len(sae) - 1 else [],
             epochs=app_args.epochs, initial_epoch=start_epoch,
             validation_data=val_data_gen,
             validation_steps=len(val_data_gen),
