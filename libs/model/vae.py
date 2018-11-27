@@ -139,6 +139,9 @@ def create_vae(input_shape, latent_dim, dropout_rate, batch_size,
 
 
 def load_last_weights(model, path, logger=None):
+    if path is None:
+        return 0
+
     if not os.path.isdir(path):
         os.makedirs(path)
 

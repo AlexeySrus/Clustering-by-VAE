@@ -4,8 +4,8 @@ import os
 import numpy as np
 from keras.datasets import mnist
 from keras.callbacks import ModelCheckpoint
-
 from libs.model.vae import create_conv_vae, load_last_weights
+from libs.model.sae import step_ae
 from libs.utils.dataset_processing import BatchDataLoader
 
 
@@ -42,19 +42,27 @@ if __name__ == '__main__':
 
     set_logger(app_args.loglevel)
 
-    models, loss = create_conv_vae(
+    sae = [step_ae(
         input_shape=(28, 28, 1),
+        output_shape=(28, 28, 1),
         latent_dim=app_args.latentdim,
-        dropout_rate=0.4,
-        batch_size=app_args.batch_size
-    )
+        loss='mse'
+    )]
 
-    vae = models["vae"]
+    for i in range(4):
+        sae.append(step_ae(
+            input_shape=(app_args.latentdim // (2 ** i), 1),
+            output_shape=(28, 28, 1),
+            latent_dim=app_args.latentdim // (2 ** (i + 1)),
+            loss='mse'
+        ))
 
-    start_epoch = load_last_weights(vae, app_args.checkpoints)
+    start_epoch = 0
     logging.info('START EPOCH NUMBER: {}'.format(start_epoch))
 
-    logging.info(vae.summary())
+
+    for ae in sae:
+        logging.info(ae["ae"].summary())
 
     callbacks = []
 
@@ -91,13 +99,37 @@ if __name__ == '__main__':
         app_args.batch_size
     )
 
-    vae.fit_generator(
-        train_data_gen,
-        len(train_data_gen),
-        callbacks=callbacks,
-        epochs=app_args.epochs, initial_epoch=start_epoch,
-        validation_data=val_data_gen,
-        validation_steps=len(val_data_gen),
-        workers=4,
-        use_multiprocessing=True
-    )
+    for i, ae in enumerate(sae):
+        if i > 0:
+            train_data_gen.eval()
+            val_data_gen.eval()
+
+            d = sae[i - 1]["encoder"].predict_generator(train_data_gen)
+            train_data_gen = BatchDataLoader(
+                d.reshape(
+                    len(d), app_args.latentdim // (2 ** (i - 1)), 1
+                ),
+                x_train,
+                app_args.batch_size
+            )
+
+            d = sae[i - 1]["encoder"].predict_generator(val_data_gen)
+            val_data_gen = BatchDataLoader(
+                d.reshape(
+                    len(d), app_args.latentdim // (2 ** (i - 1)), 1
+                ),
+                x_test,
+                app_args.batch_size
+            )
+
+        print('Train generator #{}:'.format(i + 1))
+        ae["ae"].fit_generator(
+            train_data_gen,
+            len(train_data_gen),
+            callbacks=callbacks,
+            epochs=app_args.epochs, initial_epoch=start_epoch,
+            validation_data=val_data_gen,
+            validation_steps=len(val_data_gen),
+            workers=4,
+            use_multiprocessing=True
+        )
