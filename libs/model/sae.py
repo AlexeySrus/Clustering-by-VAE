@@ -31,8 +31,8 @@ def step_ae(input_shape, output_shape, latent_dim,
     encoded = Dense(latent_dim, activation='relu')(x)
 
     input_encoded = Input(shape=(latent_dim,))
-    x = Dense(output_shape[0] * output_shape[1], activation='sigmoid')(input_encoded)
-    decoded = Reshape((output_shape[0], output_shape[1], 1))(x)
+    x = Dense(output_shape[0] * output_shape[1] * output_shape[2], activation='sigmoid')(input_encoded)
+    decoded = Reshape((output_shape[0], output_shape[1], output_shape[2]))(x)
 
     models = {}
     models["encoder"] = Model(input_img, encoded, name="encoder")
@@ -70,26 +70,25 @@ def step_vae(input_shape, output_shape, latent_dim,
 
     z = Input(shape=(latent_dim,))
 
-    z = Input(shape=(latent_dim,))
     x = Dense(128)(z)
     x = LeakyReLU()(x)
     x = apply_bn_and_dropout(x)
     x = Dense(256)(x)
     x = LeakyReLU()(x)
     x = apply_bn_and_dropout(x)
-    x = Dense(output_shape[0] * output_shape[1], activation='sigmoid')(x)
-    decoded = Reshape((output_shape[0], output_shape[1], 1))(x)
+    x = Dense(output_shape[0] * output_shape[1] * output_shape[2], activation='sigmoid')(x)
+    decoded = Reshape((output_shape[0], output_shape[1], output_shape[2]))(x)
 
     models["encoder"] = Model(input_img, l, 'Encoder')
     models["z_meaner"] = Model(input_img, z_mean, 'Enc_z_mean')
     models["z_lvarer"] = Model(input_img, z_log_var, 'Enc_z_log_var')
 
     def vae_loss(x, decoded):
-        x = K.reshape(x, shape=(batch_size, output_shape[0] * output_shape[1]))
-        decoded = K.reshape(decoded, shape=(batch_size, output_shape[0] * output_shape[1]))
-        xent_loss = output_shape[0] * output_shape[1]*binary_crossentropy(x, decoded)
+        x = K.reshape(x, shape=(batch_size, output_shape[0] * output_shape[1]*output_shape[2]))
+        decoded = K.reshape(decoded, shape=(batch_size, output_shape[0] * output_shape[1]*output_shape[2]))
+        xent_loss = output_shape[0] * output_shape[1]*output_shape[2]*binary_crossentropy(x, decoded)
         kl_loss = -0.5 * K.sum(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1)
-        return (xent_loss + kl_loss)/2/output_shape[0]/output_shape[1]
+        return (xent_loss + kl_loss)/2/output_shape[0]/output_shape[1]/output_shape[2]
 
     models["decoder"] = Model(z, decoded, name='Decoder')
     models["ae"] = Model(input_img,

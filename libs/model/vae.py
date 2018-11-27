@@ -6,7 +6,7 @@ from keras.objectives import binary_crossentropy
 from keras.layers.advanced_activations import LeakyReLU
 from keras import backend as K
 from keras.optimizers import Adam, RMSprop
-from keras.layers import Conv2D, MaxPooling2D, Dense, UpSampling2D, Reshape, Flatten, BatchNormalization, Lambda
+from keras.layers import Conv2D, MaxPooling2D, Dense, UpSampling2D, Reshape, Flatten, BatchNormalization, Lambda, Conv2DTranspose
 from keras.layers import LeakyReLU, Input, Dropout, Conv2DTranspose
 from keras.models import Model
 from keras.objectives import binary_crossentropy
@@ -34,7 +34,6 @@ def create_conv_vae(input_shape, latent_dim, dropout_rate, batch_size,
     x = MaxPooling2D((2, 2), padding='same')(x)
     x = Conv2D(32, (2, 2), activation='relu', padding='same')(x)
     x = MaxPooling2D((2, 2), padding='same')(x)
-    x = Conv2D(1, (7, 7), activation='relu', padding='same')(x)
     x = Flatten()(x)
 
     z_mean = Dense(latent_dim)(x)
@@ -50,25 +49,31 @@ def create_conv_vae(input_shape, latent_dim, dropout_rate, batch_size,
 
     z = Input(shape=(latent_dim,))
 
-    x = Dense(49)(z)
+    x = LeakyReLU()(z)
+    x = Dense(256)(x)
     x = LeakyReLU()(x)
-    x = Reshape((7, 7, 1))(x)
-    x = Conv2D(32, (7, 7), activation='relu', padding='same')(x)
-    x = UpSampling2D((2, 2))(x)
-    x = Conv2D(128, (2, 2), activation='relu', padding='same')(x)
-    x = UpSampling2D((2, 2))(x)
-    decoded = Conv2D(1, (7, 7), activation='sigmoid', padding='same')(x)
+    x = Reshape((16, 16, 1))(x)
+    x = apply_bn_and_dropout(x)
+    x = Conv2DTranspose(32, (2, 2), activation='relu', padding='same')(x)
+    x = UpSampling2D()(x)
+    x = apply_bn_and_dropout(x)
+    x = Conv2DTranspose(128, (7, 7), activation='relu', padding='same')(x)
+    x = UpSampling2D()(x)
+    x = Conv2D(1, (7, 7), activation='relu', padding='same')(x)
+    x = Flatten()(x)
+    x = Dense(input_shape[0] * input_shape[1] * input_shape[2], activation='sigmoid')(x)
+    decoded = Reshape((input_shape[0], input_shape[1], input_shape[2]))(x)
 
     models["encoder"] = Model(input_img, l, 'Encoder')
     models["z_meaner"] = Model(input_img, z_mean, 'Enc_z_mean')
     models["z_lvarer"] = Model(input_img, z_log_var, 'Enc_z_log_var')
 
     def vae_loss(x, decoded):
-        x = K.reshape(x, shape=(batch_size, input_shape[0] * input_shape[1]))
-        decoded = K.reshape(decoded, shape=(batch_size, input_shape[0] * input_shape[1]))
-        xent_loss = input_shape[0] * input_shape[1]*binary_crossentropy(x, decoded)
+        x = K.reshape(x, shape=(batch_size, input_shape[0] * input_shape[1]*input_shape[2]))
+        decoded = K.reshape(decoded, shape=(batch_size, input_shape[0] * input_shape[1]*input_shape[2]))
+        xent_loss = input_shape[0] * input_shape[2] * input_shape[1]*binary_crossentropy(x, decoded)
         kl_loss = -0.5 * K.sum(1 + z_log_var - K.square(z_mean) - K.exp(z_log_var), axis=-1)
-        return (xent_loss + kl_loss)/2/input_shape[0]/input_shape[1]
+        return (xent_loss + kl_loss)/2/input_shape[0]/input_shape[1]/input_shape[2]
 
     models["decoder"] = Model(z, decoded, name='Decoder')
     models["vae"] = Model(input_img,
