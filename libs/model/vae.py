@@ -22,7 +22,7 @@ import re
 
 
 def create_conv_vae(input_shape, latent_dim, dropout_rate, batch_size,
-                start_lr=0.001):
+                start_lr=0.0001):
     models = {}
 
     def apply_bn_and_dropout(x):
