@@ -32,6 +32,8 @@ def parse_arguments():
                             help='Shuffle dataset.')
     arg_parser.add_argument('--prepare-dataset-list', required=False, type=str,
                             help='Path to prepare dataset list.')
+    arg_parser.add_argument('--validation-split', required=False, type=float,
+                            help='Validation split rate in 0..1 range.')
     return arg_parser.parse_args()
 
 
@@ -81,6 +83,9 @@ if __name__ == '__main__':
             save_weights_only=True
         ))
 
+    val_data_gen = None
+    val_len = None
+
     origin_dataset = generate_paths(app_args.data_path)
 
     if app_args.shuffle:
@@ -91,7 +96,22 @@ if __name__ == '__main__':
         for d in origin_dataset
     ]
 
-    x_train = np.array(dataset_paths)[:, 1]
+    if app_args.validation_split is not None:
+        x_train = np.array(dataset_paths)[
+                  :int(len(dataset_paths)*(1 - app_args.validation_split)), 1]
+        x_val = np.array(dataset_paths)[
+                -int(len(dataset_paths)*app_args.validation_split):, 1]
+
+        val_data_gen = BatchDataLoaderByImagesPaths(
+            x_val,
+            x_val,
+            (28, 28, 1),
+            app_args.batch_size
+        )
+
+        val_len = len(val_data_gen)
+    else:
+        x_train = np.array(dataset_paths)[:, 1]
 
     train_data_gen = BatchDataLoaderByImagesPaths(
         x_train,
@@ -107,5 +127,7 @@ if __name__ == '__main__':
         epochs=app_args.epochs, initial_epoch=start_epoch,
         workers=4,
         use_multiprocessing=True,
-        max_queue_size=10
+        max_queue_size=10,
+        validation_data=val_data_gen,
+        validation_steps=val_len
     )
