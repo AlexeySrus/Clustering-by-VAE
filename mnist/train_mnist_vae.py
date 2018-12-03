@@ -5,7 +5,7 @@ import numpy as np
 from keras.datasets import mnist
 from keras.callbacks import ModelCheckpoint
 
-from libs.model.vae import create_conv_vae, load_last_weights
+from libs.model.vae import create_vae, create_conv_vae, load_last_weights
 from libs.utils.dataset_processing import BatchDataLoader
 
 
@@ -42,7 +42,7 @@ if __name__ == '__main__':
 
     set_logger(app_args.loglevel)
 
-    models, loss = create_conv_vae(
+    models, loss = create_vae(
         input_shape=(28, 28, 1),
         latent_dim=app_args.latentdim,
         dropout_rate=0.4,
